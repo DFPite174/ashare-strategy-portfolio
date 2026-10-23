@@ -12,6 +12,7 @@ from strategy.optimizers import (
     EqualWeightOptimizer,
     ScoreWeightedOptimizer,
     OptimizationConstraints,
+    CovarianceEstimator,
 )
 
 
@@ -89,3 +90,40 @@ def test_hrp_optimizer(sample_market_data):
     assert abs(np.sum(w) - 1.0) < 1e-5
     assert np.all(w >= 0.0)
     assert np.all(w <= 0.50 + 1e-5)
+
+
+def test_covariance_estimator_ledoit_wolf():
+    np.random.seed(42)
+    # 模拟 30 天 4 只股票的日收益率
+    rets = np.random.normal(0.0005, 0.015, size=(30, 4))
+    shrunk_cov, shrinkage = CovarianceEstimator.ledoit_wolf_shrinkage(rets)
+    assert shrunk_cov.shape == (4, 4)
+    assert 0.0 <= shrinkage <= 1.0
+    # 校验对称性与严格正定性
+    assert np.allclose(shrunk_cov, shrunk_cov.T)
+    eigenvalues = np.linalg.eigvalsh(shrunk_cov)
+    assert np.all(eigenvalues > 0)
+
+    # 统一接口
+    cov_out = CovarianceEstimator.estimate(rets, method="ledoit_wolf")
+    assert np.allclose(cov_out, shrunk_cov)
+
+
+def test_turnover_penalty_restricts_rebalancing(sample_market_data):
+    exp_rets, cov = sample_market_data
+    opt = MeanVarianceOptimizer()
+    curr_w = np.array([0.40, 0.40, 0.10, 0.10])
+
+    # 无换手率惩罚时
+    cons_no_penalty = OptimizationConstraints(max_weight=0.50, turnover_penalty=0.0)
+    w_free = opt.optimize(exp_rets, cov, current_weights=curr_w, constraints=cons_no_penalty)
+    turnover_free = np.sum(np.abs(w_free - curr_w))
+
+    # 强换手率惩罚时 (gamma = 0.20)
+    cons_strong_penalty = OptimizationConstraints(max_weight=0.50, turnover_penalty=0.20)
+    w_penalized = opt.optimize(exp_rets, cov, current_weights=curr_w, constraints=cons_strong_penalty)
+    turnover_penalized = np.sum(np.abs(w_penalized - curr_w))
+
+    # 强惩罚下的换手率应显著低于自由优化
+    assert turnover_penalized <= turnover_free
+    assert abs(np.sum(w_penalized) - 1.0) < 1e-5

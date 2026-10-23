@@ -12,6 +12,7 @@ from strategy.zoo.base_strategy import BaseStrategy, StrategyMetadata
 from strategy.optimizers.base import PortfolioOptimizer, OptimizationConstraints
 from strategy.optimizers.hrp import HierarchicalRiskParityOptimizer
 from strategy.optimizers.equal_weight import EqualWeightOptimizer
+from strategy.optimizers.covariance import CovarianceEstimator
 
 
 class MultiFactorStrategy(BaseStrategy):
@@ -65,9 +66,10 @@ class MultiFactorStrategy(BaseStrategy):
             top_syms = scores_today.nlargest(self.top_k).index.tolist()
             sub_indices = [symbols.index(s) for s in top_syms]
 
-            # 提取回看区间的收益率序列用于计算协方差
+            # 提取回看区间的收益率序列用于计算协方差 (采用 Ledoit-Wolf 收缩估计降噪)
             sub_rets = daily_returns.iloc[max(0, i - self.cov_lookback):i][top_syms]
-            cov_mat = sub_rets.cov().values if len(sub_rets) > 5 else np.eye(len(top_syms))
+            method = "ledoit_wolf" if self.constraints.use_ledoit_wolf else "sample"
+            cov_mat = CovarianceEstimator.estimate(sub_rets, method=method) if len(sub_rets) > 5 else np.eye(len(top_syms))
             exp_rets = scores_today.loc[top_syms].values
 
             # 求解局部组合优化权重

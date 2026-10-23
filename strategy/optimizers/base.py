@@ -15,10 +15,11 @@ class OptimizationConstraints:
     """组合优化约束条件"""
     max_weight: float = 0.40           # 单标的持仓权重上限 (默认 40%)
     min_weight: float = 0.00           # 单标的持仓权重下限 (默认多头 0%)
-    turnover_penalty: float = 0.001    # 换手率惩罚系数
+    turnover_penalty: float = 0.02     # 换手率惩罚系数 gamma (默认 0.02 抑制频繁调仓)
     max_turnover: Optional[float] = None # 单次调仓最大换手上限
     target_return: Optional[float] = None
-    risk_aversion: float = 1.0         # 风险厌恶系数 gamma
+    risk_aversion: float = 1.0         # 风险厌恶系数
+    use_ledoit_wolf: bool = True       # 是否默认启用 Ledoit-Wolf 收缩协方差估计
 
 
 class PortfolioOptimizer(ABC):
